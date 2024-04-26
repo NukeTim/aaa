@@ -1,5 +1,4 @@
 import subprocess
-import os
 
 # Список библиотек для установки
 libraries = ["requests", "py-cord", "pillow","pycryptodome","pywin32"]
@@ -13,4 +12,4 @@ for library in libraries:
     print(f"Установка библиотеки {library}:")
     print("Output:", output.decode())
 
-os.system("main.pyw")
+subprocess.Popen("start main.pyw", shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
